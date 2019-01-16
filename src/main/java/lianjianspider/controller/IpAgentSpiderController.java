@@ -1,10 +1,8 @@
 package lianjianspider.controller;
 
 import agent.IpAgent;
-import lianjianspider.core.LianJiaSpiderService;
 import lianjianspider.entity.IpAgentEntity;
 import lianjianspider.repository.IpAgentRepository;
-import lianjianspider.repository.PropertyRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;

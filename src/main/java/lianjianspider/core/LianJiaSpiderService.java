@@ -60,6 +60,8 @@ public class LianJiaSpiderService {
             Long beginTime = System.currentTimeMillis();
             findHouseMessageUrl(secondHandUrl, beginTime,context);
 
+            //此变量用于记录一共执行了多少次重新爬取错误的url的任务
+            Integer i = 0;
             while (errorUrl.size()>0){
                 List<String> newErrorUrl = new ArrayList();
                 newErrorUrl.addAll(errorUrl);
@@ -67,9 +69,21 @@ public class LianJiaSpiderService {
                 for(String errorUrl1:newErrorUrl){
                     collectPropertyInfo(errorUrl1,context);
                 }
+                propertyRepository.saveAll(propertyList);
+                propertyList.clear();
+                i++;
+                //如果执行超过10次,那么每次都会变慢
+                if(i>10){
+                    try {
+                        Thread.sleep(i * 10 * 1000);
+                    }catch (Exception e){
+                        e.printStackTrace();
+                    }
+                }
+                else if(i > 50){
+                    break;
+                }
             }
-            propertyRepository.saveAll(propertyList);
-            propertyList.clear();
             System.out.println("程序已经执行完毕,共记录"+getSpiderNum()+"条数据");
         }catch (Exception e){
             e.printStackTrace();
