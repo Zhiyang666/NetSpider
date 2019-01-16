@@ -41,7 +41,7 @@ public class LianJiaSpiderService {
     /**
      * 存储房产信息的list
      */
-    public List<PropertyEntity> propertyList = new ArrayList<PropertyEntity>(1 >> 10);
+    public List<PropertyEntity> propertyList = new ArrayList<>(1 >> 8);
     /**
      * 网页中存储一共多少页的class名
      */
@@ -51,7 +51,7 @@ public class LianJiaSpiderService {
      * 开始方法
      */
     public void start(String city){
-        java.lang.String URL = "https://"+city+".lianjia.com/";
+        String URL = "https://"+city+".lianjia.com/";
         Context context = new Context(URL,0);
         deleteDuplicate(context);
         try {
@@ -64,8 +64,8 @@ public class LianJiaSpiderService {
                 List<String> newErrorUrl = new ArrayList();
                 newErrorUrl.addAll(errorUrl);
                 errorUrl.clear();
-                for(java.lang.String erroeUrl1:newErrorUrl){
-                    collectPropertyInfo(erroeUrl1,context);
+                for(String errorUrl1:newErrorUrl){
+                    collectPropertyInfo(errorUrl1,context);
                 }
             }
             propertyRepository.saveAll(propertyList);

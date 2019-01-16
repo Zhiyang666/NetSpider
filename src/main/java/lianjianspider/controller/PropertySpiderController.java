@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,10 +26,13 @@ public class PropertySpiderController {
     @Autowired
     PropertyRepository propertyRepository;
 
+
+
     @GetMapping("start")
     public void start(String city){
         lianJiaSpiderService.start(city);
     }
+
 
     @GetMapping("test")
     public String test(){

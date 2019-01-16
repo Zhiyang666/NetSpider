@@ -2,6 +2,7 @@ package agent;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -16,6 +17,7 @@ import java.util.List;
  *
  * @author yuziyang
  */
+@Slf4j
 @Getter
 @Setter
 public class IpAgent {
@@ -30,7 +32,6 @@ public class IpAgent {
      */
     private List<String> effectiveAgents = new ArrayList<>();
 
-
     /**
      * 最大页数
      */
@@ -41,50 +42,79 @@ public class IpAgent {
     private String targetUrl;
 
     /**
-     * 用于测试爬取的ip是否能使用的目标网址
-     * @param url
+     * 每个ip爬取同一网站次数
      */
-    public IpAgent(String url) {
-        if (url != null) {
+    private Integer spiderNumByIp;
+
+    /**
+     * 开始
+     */
+    public void start() {
+        List<String> ipList = this.startSpiderIp();
+        this.checkUseful(ipList);
+    }
+
+    /**
+     * 用于测试爬取的ip是否能使用的目标网址
+     *
+     * @param url
+     * @param spiderNum 每个ip爬取同一网站次数
+     */
+    public IpAgent(String url, Integer spiderNumByIp) {
+        if (url != null && spiderNumByIp != null) {
             this.targetUrl = url;
+            this.spiderNumByIp = spiderNumByIp;
+        } else {
+            this.targetUrl = agentUrl;
+            this.spiderNumByIp = 5;
         }
     }
 
     public IpAgent() {
         this.targetUrl = agentUrl;
+        this.spiderNumByIp = 5;
     }
 
     /**
      * 检查爬取的ip是否有效,有效的持久化
+     *
      * @param agentIpList
      */
-    public void checkUseful(List<String> agentIpList){
-        String ip = null;
-        Integer port = null;
-
-        for(String string: agentIpList){
-
+    public void checkUseful(List<String> agentIpList) {
+        if (agentIpList == null) {
+            return;
+        }
+        String ip;
+        Integer port;
+        Integer totalNum = agentIpList.size();
+        Integer usefulNum = 0;
+        Integer unUsefulNum = 0;
+        for (String string : agentIpList) {
             String[] ipAndPort = string.split("_");
             ip = ipAndPort[0];
             port = Integer.valueOf(ipAndPort[1]);
             Document doc = null;
             //如果此ip测试目标网站成功，那么就加入到有效ip的list中
             try {
-                doc = loadHtml(targetUrl,ip,port);
-                if(doc != null){
+                //测试目标网站
+                doc = loadHtml(targetUrl, ip, port);
+            } catch (Exception e) {
+                log.info("此ip无效:" + string);
+                unUsefulNum++;
+            } finally {
+                if (doc != null) {
                     effectiveAgents.add(string);
+                    usefulNum++;
                 }
-            }catch (Exception e){
-                System.out.println("此ip无效:"+string);
             }
         }
-
-
+        log.info("检查并筛选完成,ip总条数:{},有效条数:{},无效条数:{}", totalNum, usefulNum, unUsefulNum);
     }
+
     /**
-     * 爬取表单分页URl最大页数
+     * 爬取表单分页URl的最大页数，用于构造下一个爬取页面的URL
      */
-    public List<String> spiderUrl(Document doc) {
+    private List<String> spiderUrl(Document doc) {
         List<String> urlList = new ArrayList<>(2 >> 11);
         //获取底层最大页数element
         Element element = doc.selectFirst(".pagination");
@@ -97,7 +127,7 @@ public class IpAgent {
                     this.maxPage = page;
                 }
             } catch (Exception e) {
-                System.out.println("应该是格式化错误" + e);
+                log.warn("应该是格式化错误,不会影响本程序-->" + e);
             }
         }
         for (int i = 1; i <= maxPage; i++) {
@@ -109,7 +139,7 @@ public class IpAgent {
     /**
      * 爬取具体ip代理
      */
-    public void spiderIp(Document doc, List<String> agentIp) {
+    private void spiderIp(Document doc, List<String> agentIp) {
         //获取大表单
         Element element = doc.selectFirst("#ip_list");
         //筛选出包含td的tr标签
@@ -118,18 +148,17 @@ public class IpAgent {
             //遍历tr标签，获取第1项:ip,第二项:端口
             Elements tdElements = singleElement.select("td");
             String ipAndPort = tdElements.get(1).text() + "_" + tdElements.get(2).text();
-            System.out.println(ipAndPort);
+            log.info("爬取的ip_host为:{}", ipAndPort);
             agentIp.add(ipAndPort);
         }
     }
 
     /**
      * 根据url加载html
-     *
      * @param url
      * @return
      */
-    public Document loadHtml(String url) {
+    private Document loadHtml(String url) {
         Document doc = null;
         try {
             //获取随机header
@@ -154,7 +183,7 @@ public class IpAgent {
      * @return
      * @throws Exception
      */
-    public Document loadHtml(String url, String ip, Integer port) throws Exception{
+    private Document loadHtml(String url, String ip, Integer port) throws Exception {
         if (ip == null || port == null) {
             return loadHtml(url);
         }
@@ -177,37 +206,43 @@ public class IpAgent {
         return doc;
     }
 
-    public List<String> startSpiderIp() {
+    /**
+     * 开始爬取ip
+     * @return
+     */
+    private List<String> startSpiderIp() {
         //未检测过的ip
         List<String> agentIpList = new ArrayList<>();
         Document doc = loadHtml(agentUrl);
         List<String> urlList = spiderUrl(doc);
-        Integer spiderNum = 1;
-        Integer useIpNum = 0;
+        Integer spiderNum = spiderNumByIp;
+        //当前已经使用ip池ip的个数
+        Integer usedIpNum = 0;
         String ip = null;
         Integer port = null;
         for (String url : urlList) {
-            Document pageDoc =null;
+            Document pageDoc = null;
             try {
                 while (pageDoc == null) {
-                    try{
+                    try {
                         pageDoc = loadHtml(url, ip, port);
-                        if(spiderNum ==0){
+                        if (spiderNum == 0) {
                             throw new Exception("此ip已爬取了最大爬取数,现在更换ip");
                         }
 
-                    }catch (Exception e){
-                        System.out.println(e.getMessage());
-                        String[] ipAndPort = agentIpList.get(useIpNum).split("_");
-                        System.out.println("已更换Ip代理爬取:" + agentIpList.get(useIpNum));
+                    } catch (Exception e) {
+                        log.warn(e.getMessage());
+                        String[] ipAndPort = agentIpList.get(usedIpNum).split("_");
+                        log.warn("已更换Ip代理爬取:" + agentIpList.get(usedIpNum));
                         ip = ipAndPort[0];
                         port = Integer.valueOf(ipAndPort[1]);
-                        spiderNum = 1;
-                        useIpNum++;
+                        //重置当前这个ip的剩余应加载条数
+                        spiderNum = spiderNumByIp;
+                        usedIpNum++;
                     }
                 }
                 Thread.sleep(3000);
-                System.out.println("当前爬取的页面为:" + url);
+                log.info("当前爬取的页面为:" + url);
                 spiderIp(pageDoc, agentIpList);
                 spiderNum--;
             } catch (Exception e) {
@@ -217,10 +252,6 @@ public class IpAgent {
         return agentIpList;
     }
 
-    public static void main(String[] args) {
-        IpAgent ipAgent = new IpAgent();
-        List<String> ipList = ipAgent.startSpiderIp();
-        ipAgent.checkUseful(ipList);
-    }
+
 
 }

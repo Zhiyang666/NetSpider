@@ -7,7 +7,7 @@ import lombok.Setter;
 import javax.persistence.*;
 
 /**
- * 房屋信息实体类,解析链家网页得到房屋信息
+ * 房屋信息实体类,解析链家网页得到的房屋信息
  * @author yuziyang
  */
 @Entity
