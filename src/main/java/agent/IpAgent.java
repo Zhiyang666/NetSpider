@@ -20,7 +20,6 @@ import java.util.List;
 @Setter
 public class IpAgent {
     /**
-     * c
      * 目标代理url:西刺代理
      * 免费代理，但是可用率很低
      */
@@ -42,8 +41,7 @@ public class IpAgent {
     private String targetUrl;
 
     /**
-     * 用于测试爬取的ip是否能使用
-     *
+     * 用于测试爬取的ip是否能使用的目标网址
      * @param url
      */
     public IpAgent(String url) {
@@ -53,9 +51,36 @@ public class IpAgent {
     }
 
     public IpAgent() {
-
+        this.targetUrl = agentUrl;
     }
 
+    /**
+     * 检查爬取的ip是否有效,有效的持久化
+     * @param agentIpList
+     */
+    public void checkUseful(List<String> agentIpList){
+        String ip = null;
+        Integer port = null;
+
+        for(String string: agentIpList){
+
+            String[] ipAndPort = string.split("_");
+            ip = ipAndPort[0];
+            port = Integer.valueOf(ipAndPort[1]);
+            Document doc = null;
+            //如果此ip测试目标网站成功，那么就加入到有效ip的list中
+            try {
+                doc = loadHtml(targetUrl,ip,port);
+                if(doc != null){
+                    effectiveAgents.add(string);
+                }
+            }catch (Exception e){
+                System.out.println("此ip无效:"+string);
+            }
+        }
+
+
+    }
     /**
      * 爬取表单分页URl最大页数
      */
@@ -121,6 +146,14 @@ public class IpAgent {
         return doc;
     }
 
+    /**
+     * 由于是代理加载,所以可以适当延时，否则容易报超时异常
+     * @param url
+     * @param ip
+     * @param port
+     * @return
+     * @throws Exception
+     */
     public Document loadHtml(String url, String ip, Integer port) throws Exception{
         if (ip == null || port == null) {
             return loadHtml(url);
@@ -129,6 +162,8 @@ public class IpAgent {
         try {
             //获取随机header
             Headers headers = new Headers();
+            //设置proxy代理
+//            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(ip, port));
             //jsoup加载
             doc = Jsoup.connect(url)
                     .userAgent(headers.getHeader())
@@ -142,15 +177,11 @@ public class IpAgent {
         return doc;
     }
 
-    public void start() {
-    }
-
-    public static void main(String[] args) {
-        IpAgent ipAgent = new IpAgent();
+    public List<String> startSpiderIp() {
         //未检测过的ip
-        List<String> agentIp = new ArrayList<>();
-        Document doc = ipAgent.loadHtml(agentUrl);
-        List<String> urlList = ipAgent.spiderUrl(doc);
+        List<String> agentIpList = new ArrayList<>();
+        Document doc = loadHtml(agentUrl);
+        List<String> urlList = spiderUrl(doc);
         Integer spiderNum = 1;
         Integer useIpNum = 0;
         String ip = null;
@@ -160,32 +191,36 @@ public class IpAgent {
             try {
                 while (pageDoc == null) {
                     try{
-                        pageDoc = ipAgent.loadHtml(url, ip, port);
+                        pageDoc = loadHtml(url, ip, port);
                         if(spiderNum ==0){
                             throw new Exception("此ip已爬取了最大爬取数,现在更换ip");
                         }
 
                     }catch (Exception e){
                         System.out.println(e.getMessage());
-                        String[] ipAndPort = agentIp.get(useIpNum).split("_");
-                        System.out.println("已更换Ip代理爬取:" + agentIp.get(useIpNum));
+                        String[] ipAndPort = agentIpList.get(useIpNum).split("_");
+                        System.out.println("已更换Ip代理爬取:" + agentIpList.get(useIpNum));
                         ip = ipAndPort[0];
                         port = Integer.valueOf(ipAndPort[1]);
                         spiderNum = 1;
                         useIpNum++;
-
                     }
                 }
                 Thread.sleep(3000);
                 System.out.println("当前爬取的页面为:" + url);
-                ipAgent.spiderIp(pageDoc, agentIp);
+                spiderIp(pageDoc, agentIpList);
                 spiderNum--;
-
             } catch (Exception e) {
                 e.printStackTrace();
-
             }
         }
+        return agentIpList;
+    }
+
+    public static void main(String[] args) {
+        IpAgent ipAgent = new IpAgent();
+        List<String> ipList = ipAgent.startSpiderIp();
+        ipAgent.checkUseful(ipList);
     }
 
 }
