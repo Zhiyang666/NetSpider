@@ -9,6 +9,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -33,6 +34,11 @@ public class IpAgent {
     private List<String> effectiveAgents = new ArrayList<>();
 
     /**
+     * 未检查的代理ip
+     */
+    private List<String> uncheckAgents = new ArrayList<>();
+
+    /**
      * 最大页数
      */
     Integer maxPage = 0;
@@ -47,18 +53,54 @@ public class IpAgent {
     private Integer spiderNumByIp;
 
     /**
+     * 是否执行完爬取ip的标示(执行完爬取，并没有执行完检查)
+     */
+    Boolean finishSpider;
+    /**
      * 开始
      */
     public void start() {
-        List<String> ipList = this.startSpiderIp();
-        this.checkUseful(ipList);
+        this.finishSpider = false;
+        IpAgent ipAgent = this;
+        new Thread() {
+            @Override
+            public void run() {
+                Integer front = 0;
+                Integer back = 500;
+                while (true) {
+                    Integer ipAgentlength = ipAgent.getUncheckAgents().size();
+                    if(ipAgent.finishSpider){
+                        List<String> uncheckAgents = new ArrayList<>();
+                        uncheckAgents.addAll(ipAgent.getUncheckAgents().subList(front,ipAgent.getUncheckAgents().size()-1));
+                        ipAgent.checkUseful(uncheckAgents);
+                        break;
+                    }
+                    if (ipAgentlength > back) {
+                        List<String> uncheckAgents = new ArrayList<>();
+                        uncheckAgents.addAll(ipAgent.getUncheckAgents().subList(front,back));
+                        ipAgent.checkUseful(uncheckAgents);
+                        front = back ;
+                        back = back + 500;
+                    }
+                    try {
+                        this.sleep(5000);
+                    }catch (Exception e){
+                        e.printStackTrace();
+                    }
+
+                }
+            }
+        }.start();
+        this.startSpiderIp();
+        this.finishSpider = true;
+//        this.checkUseful(this.uncheckAgents);
     }
 
     /**
      * 用于测试爬取的ip是否能使用的目标网址
      *
      * @param url
-     * @param spiderNum 每个ip爬取同一网站次数
+     * @param spiderNumByIp 每个ip爬取同一网站次数
      */
     public IpAgent(String url, Integer spiderNumByIp) {
         if (url != null && spiderNumByIp != null) {
@@ -139,7 +181,7 @@ public class IpAgent {
     /**
      * 爬取具体ip代理
      */
-    private void spiderIp(Document doc, List<String> agentIp) {
+    private void spiderIp(Document doc) {
         //获取大表单
         Element element = doc.selectFirst("#ip_list");
         //筛选出包含td的tr标签
@@ -149,12 +191,13 @@ public class IpAgent {
             Elements tdElements = singleElement.select("td");
             String ipAndPort = tdElements.get(1).text() + "_" + tdElements.get(2).text();
             log.info("爬取的ip_host为:{}", ipAndPort);
-            agentIp.add(ipAndPort);
+            uncheckAgents.add(ipAndPort);
         }
     }
 
     /**
      * 根据url加载html
+     *
      * @param url
      * @return
      */
@@ -177,6 +220,7 @@ public class IpAgent {
 
     /**
      * 由于是代理加载,所以可以适当延时，否则容易报超时异常
+     *
      * @param url
      * @param ip
      * @param port
@@ -208,11 +252,10 @@ public class IpAgent {
 
     /**
      * 开始爬取ip
+     *
      * @return
      */
-    private List<String> startSpiderIp() {
-        //未检测过的ip
-        List<String> agentIpList = new ArrayList<>();
+    private void startSpiderIp() {
         Document doc = loadHtml(agentUrl);
         List<String> urlList = spiderUrl(doc);
         Integer spiderNum = spiderNumByIp;
@@ -220,38 +263,48 @@ public class IpAgent {
         Integer usedIpNum = 0;
         String ip = null;
         Integer port = null;
+        A:
         for (String url : urlList) {
+            //每一页必将会被爬取
             Document pageDoc = null;
-            try {
-                while (pageDoc == null) {
-                    try {
-                        pageDoc = loadHtml(url, ip, port);
-                        if (spiderNum == 0) {
-                            throw new Exception("此ip已爬取了最大爬取数,现在更换ip");
-                        }
-
-                    } catch (Exception e) {
-                        log.warn(e.getMessage());
-                        String[] ipAndPort = agentIpList.get(usedIpNum).split("_");
-                        log.warn("已更换Ip代理爬取:" + agentIpList.get(usedIpNum));
-                        ip = ipAndPort[0];
-                        port = Integer.valueOf(ipAndPort[1]);
-                        //重置当前这个ip的剩余应加载条数
-                        spiderNum = spiderNumByIp;
-                        usedIpNum++;
+            //记录一个页面报错的次数
+            Integer thisUrlErrorCount = 0;
+            while (pageDoc == null) {
+                try {
+                    Thread.sleep(3000);
+                    log.info("当前爬取的页面为:" + url);
+                    pageDoc = loadHtml(url, ip, port);
+                    if (spiderNum == 0) {
+                        throw new Exception("此ip已爬取了最大爬取数,现在更换ip");
                     }
+
+                } catch (Exception e) {
+                    //超过20次就停止搜索这个页面
+                    if (thisUrlErrorCount >= 20) {
+                        continue A;
+                    }
+                    thisUrlErrorCount++;
+                    log.warn(e.getMessage());
+                    //提前筛选掉无用的ip，如果spiderNum降到0，说明此ip已经使用成功过5次，则使用下一ip，如果没到5次，那么
+                    //就删除当前位置的ip，删除之后下一位置的ip会自动前移，因此不用加1
+                    //由于采用多线程判断是否有效，因此不需要在此删除
+//                    if (spiderNum == 0) {
+//                        usedIpNum++;
+//                    } else {
+//                        uncheckAgents.remove(usedIpNum.intValue());
+//                    }
+                    String[] ipAndPort = uncheckAgents.get(usedIpNum).split("_");
+                    log.warn("已更换Ip代理爬取:" + uncheckAgents.get(usedIpNum));
+                    ip = ipAndPort[0];
+                    port = Integer.valueOf(ipAndPort[1]);
+                    //重置当前这个ip的剩余应加载条数
+                    spiderNum = spiderNumByIp;
+                    usedIpNum++;
                 }
-                Thread.sleep(3000);
-                log.info("当前爬取的页面为:" + url);
-                spiderIp(pageDoc, agentIpList);
-                spiderNum--;
-            } catch (Exception e) {
-                e.printStackTrace();
             }
+            spiderIp(pageDoc);
+            spiderNum--;
         }
-        return agentIpList;
+
     }
-
-
-
 }

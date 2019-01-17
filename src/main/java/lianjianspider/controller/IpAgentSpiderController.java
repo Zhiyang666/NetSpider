@@ -5,6 +5,7 @@ import lianjianspider.entity.IpAgentEntity;
 import lianjianspider.repository.IpAgentRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,13 +30,13 @@ public class IpAgentSpiderController {
         this.ipAgentRepository = ipAgentRepository;
     }
 
+    @Async
     @GetMapping("start")
     public void start(String targetUrl){
-        List<IpAgentEntity> agentEntities = startSpiderIpAgent(targetUrl);
-        ipAgentRepository.saveAll(agentEntities);
+        startSpiderIpAgent(targetUrl);
     }
 
-    private List<IpAgentEntity> startSpiderIpAgent(String targetUrl){
+    public void startSpiderIpAgent(String targetUrl){
         List<IpAgentEntity> agentEntities = new ArrayList<>();
         Date thisTime = new Date();
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -43,6 +44,7 @@ public class IpAgentSpiderController {
         String spiderTime = sdf.format(thisTime);
         //开始爬取ip代理
         ipAgent.start();
+
         //获取有效数据
         List<String> effectiveAgents = ipAgent.getEffectiveAgents();
         for (String string : effectiveAgents){
@@ -56,6 +58,6 @@ public class IpAgentSpiderController {
             ipAgentEntity.setTargetUrl(targetUrl);
             agentEntities.add(ipAgentEntity);
         }
-        return agentEntities;
+        ipAgentRepository.saveAll(agentEntities);
     }
 }

@@ -5,6 +5,7 @@ import lianjianspider.core.LianJiaSpiderService;
 import lianjianspider.repository.PropertyRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,8 +27,7 @@ public class PropertySpiderController {
     @Autowired
     PropertyRepository propertyRepository;
 
-
-
+    @Async
     @GetMapping("start")
     public void start(String city){
         lianJiaSpiderService.start(city);
