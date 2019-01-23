@@ -9,6 +9,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -36,7 +37,7 @@ public class IpAgent {
     /**
      * 未检查的代理ip
      */
-    private List<String> uncheckAgents = new ArrayList<>();
+    private List<String> uncheckAgents = Collections.synchronizedList(new ArrayList<>());
 
     /**
      * 最大页数
@@ -56,41 +57,47 @@ public class IpAgent {
      * 是否执行完爬取ip的标示(执行完爬取，并没有执行完检查)
      */
     Boolean finishSpider;
+
     /**
      * 开始
      */
     public void start() {
         this.finishSpider = false;
         IpAgent ipAgent = this;
-        new Thread() {
-            @Override
-            public void run() {
-                Integer front = 0;
-                Integer back = 500;
-                while (true) {
-                    Integer ipAgentlength = ipAgent.getUncheckAgents().size();
-                    if(ipAgent.finishSpider){
-                        List<String> uncheckAgents = new ArrayList<>();
-                        uncheckAgents.addAll(ipAgent.getUncheckAgents().subList(front,ipAgent.getUncheckAgents().size()-1));
-                        ipAgent.checkUseful(uncheckAgents);
-                        break;
+        //每次检查的容量
+        int capacity = 100;
+        //线程数
+        int threadNum = 20;
+        for (int i = 0; i < threadNum; i++) {
+            log.info("当前正在创建第{}个监听线程,请耐心等待。",i);
+            int j = i;
+            new Thread() {
+                @Override
+                public void run() {
+                    Integer front = j * capacity;
+                    Integer back = front + capacity;
+                    while (true) {
+                        Integer ipAgentLength = ipAgent.getUncheckAgents().size();
+                        if (ipAgent.finishSpider) {
+                            List<String> uncheckAgents = new ArrayList<>(ipAgent.getUncheckAgents().subList(front, ipAgent.getUncheckAgents().size() - 1));
+                            ipAgent.checkUseful(uncheckAgents);
+                            break;
+                        }
+                        if (ipAgentLength > back) {
+                            List<String> uncheckAgents = new ArrayList<>(ipAgent.getUncheckAgents().subList(front, back));
+                            ipAgent.checkUseful(uncheckAgents);
+                            front = front + capacity * threadNum;
+                            back = front + capacity;
+                        }
+                        try {
+                            this.sleep(5000);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
                     }
-                    if (ipAgentlength > back) {
-                        List<String> uncheckAgents = new ArrayList<>();
-                        uncheckAgents.addAll(ipAgent.getUncheckAgents().subList(front,back));
-                        ipAgent.checkUseful(uncheckAgents);
-                        front = back ;
-                        back = back + 500;
-                    }
-                    try {
-                        this.sleep(5000);
-                    }catch (Exception e){
-                        e.printStackTrace();
-                    }
-
                 }
-            }
-        }.start();
+            }.start();
+        }
         this.startSpiderIp();
         this.finishSpider = true;
 //        this.checkUseful(this.uncheckAgents);
@@ -259,8 +266,10 @@ public class IpAgent {
         Document doc = loadHtml(agentUrl);
         List<String> urlList = spiderUrl(doc);
         Integer spiderNum = spiderNumByIp;
-        //当前已经使用ip池ip的个数
-        Integer usedIpNum = 0;
+        //当前已经使用未检查ip池ip的个数
+        Integer usedUncheckIpNum = 0;
+        //当前已经使用有效ip池ip的个数
+        Integer usedEffectiveIpNum = 0;
         String ip = null;
         Integer port = null;
         A:
@@ -277,7 +286,6 @@ public class IpAgent {
                     if (spiderNum == 0) {
                         throw new Exception("此ip已爬取了最大爬取数,现在更换ip");
                     }
-
                 } catch (Exception e) {
                     //超过20次就停止搜索这个页面
                     if (thisUrlErrorCount >= 20) {
@@ -285,26 +293,23 @@ public class IpAgent {
                     }
                     thisUrlErrorCount++;
                     log.warn(e.getMessage());
-                    //提前筛选掉无用的ip，如果spiderNum降到0，说明此ip已经使用成功过5次，则使用下一ip，如果没到5次，那么
-                    //就删除当前位置的ip，删除之后下一位置的ip会自动前移，因此不用加1
-                    //由于采用多线程判断是否有效，因此不需要在此删除
-//                    if (spiderNum == 0) {
-//                        usedIpNum++;
-//                    } else {
-//                        uncheckAgents.remove(usedIpNum.intValue());
-//                    }
-                    String[] ipAndPort = uncheckAgents.get(usedIpNum).split("_");
-                    log.warn("已更换Ip代理爬取:" + uncheckAgents.get(usedIpNum));
+                    //修改,优先使用有效ip爬取
+                    String[] ipAndPort;
+                    if (effectiveAgents.size() > usedEffectiveIpNum) {
+                        ipAndPort = effectiveAgents.get(usedEffectiveIpNum).split("_");
+                        log.warn("已更换使用检查有效Ip代理爬取:{},当前正在使用第{}条有效ip", effectiveAgents.get(usedEffectiveIpNum), usedEffectiveIpNum++);
+                    } else {
+                        ipAndPort = uncheckAgents.get(usedUncheckIpNum).split("_");
+                        log.warn("已更换使用未检查Ip代理爬取:{},当前正在使用第{}条未检查ip", uncheckAgents.get(usedUncheckIpNum), usedUncheckIpNum++);
+                    }
                     ip = ipAndPort[0];
                     port = Integer.valueOf(ipAndPort[1]);
                     //重置当前这个ip的剩余应加载条数
                     spiderNum = spiderNumByIp;
-                    usedIpNum++;
                 }
             }
             spiderIp(pageDoc);
             spiderNum--;
         }
-
     }
 }

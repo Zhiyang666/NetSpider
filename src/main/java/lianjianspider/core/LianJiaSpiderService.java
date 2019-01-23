@@ -38,10 +38,12 @@ public class LianJiaSpiderService {
      * 存储链接超时报错URL
      */
     public List<String> errorUrl = new ArrayList<>(1>>8);
+
     /**
      * 存储房产信息的list
      */
     public List<PropertyEntity> propertyList = new ArrayList<>(1 >> 8);
+
     /**
      * 网页中存储一共多少页的class名
      */
@@ -112,7 +114,6 @@ public class LianJiaSpiderService {
         }
         return url;
     }
-
     /**
      * 根据二手房URL去查询房源链接，并返回数据
      */
@@ -155,7 +156,6 @@ public class LianJiaSpiderService {
         }
         return url;
     }
-
     /**
      * 根据具体房源url抓取房源信息
      *
@@ -215,7 +215,6 @@ public class LianJiaSpiderService {
             errorUrl.add(url);
         }
     }
-
     /**
      * 看当天是否已经爬取过数据,如果爬取过,就删除重新爬
      */

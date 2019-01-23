@@ -32,8 +32,11 @@ public class ScheduleService {
         lianJiaSpiderService.start("nj");
     }
 
+    /**
+     * 从22号每隔三天
+     */
     @Async
-    @Scheduled(cron = "0 0 3 * * ?")
+    @Scheduled(cron = "0 0 3 1/3 * ?")
     public void autoStartSpiderIpAgent(){
         IpAgentSpiderController ipAgentSpiderController = new IpAgentSpiderController(ipAgentRepository);
         ipAgentSpiderController.start("https://nj.lianjia.com/");
